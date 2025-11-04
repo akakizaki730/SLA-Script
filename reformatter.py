@@ -281,7 +281,7 @@ def update_alt_text(soup):
             old_filepath = os.path.join(os.getcwd(), old_filename)
             new_filepath = os.path.join(os.getcwd(), new_filename)
             
-            # 2. Only attempt to rename if the old file exists and the names are different.
+            #Only attempt to rename if the old file exists and the names are different.
             if os.path.exists(old_filepath) and old_filename != new_filename:
                 try:
                     os.rename(old_filepath, new_filepath)
