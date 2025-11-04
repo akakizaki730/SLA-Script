@@ -28,6 +28,10 @@ pip install beautifulsoup4
 1. Locate your HTML files and place them in a single directory to be processed. 
 2. Open 'main.py' and modify the 'input_folder' in the main function to point ot hte directory containing your input HTML file. (Line 38)
 * input_folder = "/path/to/your/html/files"
-3. Run main.py on your terminal : python3 main.py
+3. Run main.py on your terminal : 
+
+```bash
+python3 main.py
+```
 
 
