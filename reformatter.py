@@ -1,5 +1,6 @@
 from bs4 import BeautifulSoup, NavigableString, Tag
 import re
+import os
 
 def reformat_html(html_content):
     soup = BeautifulSoup(html_content, 'html.parser')
@@ -228,8 +229,7 @@ def transform_step_text_to_h3(soup):
 
 def update_alt_text(soup):
     images = soup.find_all('img')
-    
-    #container to keep count of img
+    # container to keep count of img
     image_counts = {}
 
     for img in images:
@@ -249,36 +249,51 @@ def update_alt_text(soup):
             #src renaming logic --> strip "step" replace whitespace with "-" and lowercase it
             text_without_step = re.sub(r'^Step \d+:\s*', '', h3_key, flags=re.IGNORECASE).strip()
             #remove commas
-            text_without_comma=re.sub(r',','',text_without_step)
+            text_without_comma = re.sub(r',', '', text_without_step)
             alt_with_dashes = re.sub(r'\s+', '-', text_without_comma)
             base_imgfile = alt_with_dashes.lower()
 
-            #attach the # of img if there is more than 1
+            # attach the # of img if there is more than 1
             if current_img_number > 1:
-                final_filename = f"{base_imgfile}-{current_img_number}"
+                final_filename_base = f"{base_imgfile}-{current_img_number}"
             else:
-                final_filename = base_imgfile
+                final_filename_base = base_imgfile
 
-            #find src filepath
+            # find src filepath
             original_src = img.get('src', '')
             
-            #reads the current file path
+            # reads the current file path
             src_parts_match = re.match(r'^(.*[/])?(.*)(\.[a-zA-Z0-9]+)$', original_src)
             
-            #not sure if we need this but defaults file to png if not assigned anything
             path_prefix = src_parts_match.group(1) if src_parts_match and src_parts_match.group(1) else ''
-            extension = src_parts_match.group(3) if src_parts_match and src_parts_match.group(3) else '.png'
+            extension = src_parts_match.group(3).lower() if src_parts_match and src_parts_match.group(3) else '.png'
             
-            #makes new src file path
-            new_src_value = f"{path_prefix}{final_filename}{extension}"
+            #get the existing filename
+            old_filename = src_parts_match.group(2) + src_parts_match.group(3) if src_parts_match else original_src
             
-            #set src to new value
+            #makes new src file path (for HTML)
+            new_src_value = f"{path_prefix}{final_filename_base}{extension}"
+            
+            #define the new physical filename
+            new_filename = f"{final_filename_base}{extension}"
+
+            #actual file renaming
+            old_filepath = os.path.join(os.getcwd(), old_filename)
+            new_filepath = os.path.join(os.getcwd(), new_filename)
+            
+            # 2. Only attempt to rename if the old file exists and the names are different.
+            if os.path.exists(old_filepath) and old_filename != new_filename:
+                try:
+                    os.rename(old_filepath, new_filepath)
+                    # print(f"Successfully renamed physical file: {old_filename} -> {new_filename}") # Debug
+                except Exception as e:
+                    print(f"Error renaming physical file {old_filename}: {e}")
+            
             img['src'] = new_src_value
             img['alt'] = h3_key
             img['title'] = h3_key
            
     return soup
-
 
 def transform_overview_to_strong(soup):
     #pattern to match overview
