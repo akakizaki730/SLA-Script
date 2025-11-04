@@ -35,7 +35,7 @@ def main():
     """
     Processes all HTML files in a specified folder.
     """
-    input_folder = "/Users/aya.kakizaki/Desktop/SLA repair script"  #save path
+    input_folder = " "  #save path
     
     for filename in os.listdir(input_folder):
         if filename.endswith(".html") or filename.endswith(".htm"):
