@@ -249,8 +249,9 @@ def update_alt_text(soup):
             #src renaming logic --> strip "step" replace whitespace with "-" and lowercase it
             text_without_step = re.sub(r'^Step \d+:\s*', '', h3_key, flags=re.IGNORECASE).strip()
             #remove commas
-            text_without_comma = re.sub(r',', '', text_without_step)
-            alt_with_dashes = re.sub(r'\s+', '-', text_without_comma)
+            text_without_punc = re.sub(r'[,:]', '', text_without_step)
+
+            alt_with_dashes = re.sub(r'\s+', '-', text_without_punc)
             base_imgfile = alt_with_dashes.lower()
 
             # attach the # of img if there is more than 1
