@@ -701,8 +701,7 @@ def transform_table_with_img_tip(soup):
 
 def clean_google_links(soup):
     """
-    Removes Google Docs tracking/redirection wrappers from <a> tags' href attributes.
-    Removes the prefix "https://www.google.com/url?q=" and the suffix "&sa=D&source=editors&ust=.*?&usg=.*?".
+    removes Google Docs tracking wrappers from <a> tags' href attributes.
     """
     #use "&" for pattern matching
     suffix_pattern = re.compile(r'&sa=D&source=editors&ust=.*?&usg=.*?$')
