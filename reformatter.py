@@ -9,6 +9,7 @@ def reformat_html(html_content):
 
     soup = transform_overview_to_strong(soup)
     soup=bolden_estimated_time(soup)
+    soup=clean_google_links(soup)
     soup=transform_preceding_p_to_h2(soup)
     soup = transform_required_supplies_table(soup)
     soup=transform_required_supplies_to_grid(soup)
@@ -23,8 +24,9 @@ def reformat_html(html_content):
     soup=transform_warning_h3_to_div(soup)
     soup=transform_note_tables(soup)
     soup=transform_tip_or_note_p_to_div(soup)
-    soip=transform_table_with_img_tip(soup)
-    
+    soup=transform_table_with_img_tip(soup)
+   
+
     soup=remove_unnecessary_text(soup, unwanted_words)
     soup=capitalize_specific_words(soup)
 
@@ -695,6 +697,29 @@ def transform_table_with_img_tip(soup):
             #moves the entire <p> tag inside the <div class="tip">
             tip_div.append(p_tag_to_move.extract())
 
+    return soup
+
+def clean_google_links(soup):
+    """
+    Removes Google Docs tracking/redirection wrappers from <a> tags' href attributes.
+    Removes the prefix "https://www.google.com/url?q=" and the suffix "&sa=D&source=editors&ust=.*?&usg=.*?".
+    """
+    #use "&" for pattern matching
+    suffix_pattern = re.compile(r'&sa=D&source=editors&ust=.*?&usg=.*?$')
+
+    for a_tag in soup.find_all('a', href=True):
+        original_href = a_tag['href']
+        cleaned_href = original_href
+        
+        #remove google prefix
+        prefix = "https://www.google.com/url?q="
+        if cleaned_href.startswith(prefix):
+            cleaned_href = cleaned_href[len(prefix):]
+
+        cleaned_href = suffix_pattern.sub('', cleaned_href)
+        
+        a_tag['href'] = cleaned_href
+        
     return soup
 
 
