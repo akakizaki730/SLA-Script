@@ -1,6 +1,7 @@
 from bs4 import BeautifulSoup, NavigableString, Tag
 import re
 import os
+import shutil
 
 def reformat_html(html_content):
     soup = BeautifulSoup(html_content, 'html.parser')
@@ -229,72 +230,167 @@ def transform_step_text_to_h3(soup):
     return soup
 
 
+# #def update_alt_text(soup):
+#     images = soup.find_all('img')
+#     # container to keep count of img
+#     image_counts = {}
+
+#     for img in images:
+#         prev_h3 = img.find_previous('h3')
+
+#         if prev_h3:
+#             #gets content of h3 and acts as the reference key
+#             h3_key = prev_h3.get_text().strip()
+
+#             #image counting logic
+#             if h3_key not in image_counts:
+#                 image_counts[h3_key] = 1
+#             else:
+#                 image_counts[h3_key] += 1
+#             current_img_number = image_counts[h3_key]
+
+#             #src renaming logic --> strip "step" replace whitespace with "-" and lowercase it
+#             text_without_step = re.sub(r'^Step \d+:\s*', '', h3_key, flags=re.IGNORECASE).strip()
+#             #remove commas
+#             text_without_punc = re.sub(r'[,:]', '', text_without_step)
+
+#             alt_with_dashes = re.sub(r'\s+', '-', text_without_punc)
+#             base_imgfile = alt_with_dashes.lower()
+
+#             # attach the # of img if there is more than 1
+#             if current_img_number > 1:
+#                 final_filename_base = f"{base_imgfile}-{current_img_number}"
+#             else:
+#                 final_filename_base = base_imgfile
+
+#             # find src filepath
+#             original_src = img.get('src', '')
+            
+#             # reads the current file path
+#             src_parts_match = re.match(r'^(.*[/])?(.*)(\.[a-zA-Z0-9]+)$', original_src)
+            
+#             path_prefix = src_parts_match.group(1) if src_parts_match and src_parts_match.group(1) else ''
+#             extension = src_parts_match.group(3).lower() if src_parts_match and src_parts_match.group(3) else '.png'
+            
+#             #get the existing filename
+#             old_filename = src_parts_match.group(2) + src_parts_match.group(3) if src_parts_match else original_src
+            
+#             #makes new src file path (for HTML)
+#             new_src_value = f"{path_prefix}{final_filename_base}{extension}"
+            
+#             #define the new physical filename
+#             new_filename = f"{final_filename_base}{extension}"
+
+#             #actual file renaming
+#             old_filepath = os.path.join(os.getcwd(), old_filename)
+#             new_filepath = os.path.join(os.getcwd(), new_filename)
+            
+#             #Only attempt to rename if the old file exists and the names are different.
+#             if os.path.exists(old_filepath) and old_filename != new_filename:
+#                 try:
+#                     os.rename(old_filepath, new_filepath)
+#                     # print(f"Successfully renamed physical file: {old_filename} -> {new_filename}") # Debug
+#                 except Exception as e:
+#                     print(f"Error renaming physical file {old_filename}: {e}")
+            
+#             img['src'] = new_src_value
+#             img['alt'] = h3_key
+#             img['title'] = h3_key
+           
+#     return soup
+
 def update_alt_text(soup):
     images = soup.find_all('img')
-    # container to keep count of img
     image_counts = {}
+    
+    #1. disctionary container to keep track whether images are being reused 
+    processed_files = {} 
 
     for img in images:
         prev_h3 = img.find_previous('h3')
 
-        if prev_h3:
-            #gets content of h3 and acts as the reference key
-            h3_key = prev_h3.get_text().strip()
+        if not prev_h3:
+            continue
 
-            #image counting logic
-            if h3_key not in image_counts:
-                image_counts[h3_key] = 1
-            else:
-                image_counts[h3_key] += 1
-            current_img_number = image_counts[h3_key]
+        h3_key = prev_h3.get_text().strip()
+        
+        #h3 will act as a reference key
+        if h3_key not in image_counts:
+            image_counts[h3_key] = 1
+        else:
+            image_counts[h3_key] += 1
+        current_img_number = image_counts[h3_key]
 
-            #src renaming logic --> strip "step" replace whitespace with "-" and lowercase it
-            text_without_step = re.sub(r'^Step \d+:\s*', '', h3_key, flags=re.IGNORECASE).strip()
-            #remove commas
-            text_without_punc = re.sub(r'[,:]', '', text_without_step)
 
-            alt_with_dashes = re.sub(r'\s+', '-', text_without_punc)
-            base_imgfile = alt_with_dashes.lower()
+        original_src = img.get('src', '')
+        
+        # split src into path, base name and extension
+        src_parts_match = re.match(r'^(.*[/])?(.*)(\.[a-zA-Z0-9]+)$', original_src)
+        if not src_parts_match:
+            continue
+            
+        path_prefix = src_parts_match.group(1) if src_parts_match and src_parts_match.group(1) else ''
+        extension = src_parts_match.group(3).lower()
+        original_filename_full = src_parts_match.group(2) + src_parts_match.group(3)
 
-            # attach the # of img if there is more than 1
-            if current_img_number > 1:
-                final_filename_base = f"{base_imgfile}-{current_img_number}"
-            else:
-                final_filename_base = base_imgfile
+        
+        #2.generate new fileneame we want
+        #remove step: x
+        text_without_step = re.sub(r'^Step \d+:\s*', '', h3_key, flags=re.IGNORECASE).strip()
 
-            # find src filepath
-            original_src = img.get('src', '')
-            
-            # reads the current file path
-            src_parts_match = re.match(r'^(.*[/])?(.*)(\.[a-zA-Z0-9]+)$', original_src)
-            
-            path_prefix = src_parts_match.group(1) if src_parts_match and src_parts_match.group(1) else ''
-            extension = src_parts_match.group(3).lower() if src_parts_match and src_parts_match.group(3) else '.png'
-            
-            #get the existing filename
-            old_filename = src_parts_match.group(2) + src_parts_match.group(3) if src_parts_match else original_src
-            
-            #makes new src file path (for HTML)
-            new_src_value = f"{path_prefix}{final_filename_base}{extension}"
-            
-            #define the new physical filename
-            new_filename = f"{final_filename_base}{extension}"
+        text_without_punc = re.sub(r'[,:]', '', text_without_step) #remove colon
+        alt_with_dashes = re.sub(r'\s+', '-', text_without_punc)
+        base_imgfile = alt_with_dashes.lower()
+        
+        #if theres multiple img within same step, add a #
+        if current_img_number > 1:
+            final_filename_base = f"{base_imgfile}-{current_img_number}"
+        else:
+            final_filename_base = base_imgfile
+        
+        new_filename_full = f"{final_filename_base}{extension}"
+        
+        #3. Next action; rename, copy, or skip
+        
+        #initialize set for original files if needed
+        if original_filename_full not in processed_files:
+            processed_files[original_filename_full] = set()
 
-            #actual file renaming
-            old_filepath = os.path.join(os.getcwd(), old_filename)
-            new_filepath = os.path.join(os.getcwd(), new_filename)
+        #check whether new file name is created yet  
+        if new_filename_full not in processed_files[original_filename_full]:
             
-            #Only attempt to rename if the old file exists and the names are different.
-            if os.path.exists(old_filepath) and old_filename != new_filename:
-                try:
-                    os.rename(old_filepath, new_filepath)
-                    # print(f"Successfully renamed physical file: {old_filename} -> {new_filename}") # Debug
-                except Exception as e:
-                    print(f"Error renaming physical file {old_filename}: {e}")
+            old_filepath = os.path.join(os.getcwd(), original_filename_full)
+            new_filepath = os.path.join(os.getcwd(), new_filename_full)
             
-            img['src'] = new_src_value
-            img['alt'] = h3_key
-            img['title'] = h3_key
+            try:
+                if not processed_files[original_filename_full]:
+                    #this is the absolute first time the original file is encountered
+                    if os.path.exists(old_filepath):
+                        os.rename(old_filepath, new_filepath)
+                    else:
+                        #file dne
+                        processed_files[original_filename_full].add(new_filename_full)
+
+                else:
+                    #reuse case. it makes copy from the file it was renamed 
+                    source_filename = next(iter(processed_files[original_filename_full]))
+                    source_filepath = os.path.join(os.getcwd(), source_filename)
+                    
+                    if os.path.exists(source_filepath):
+                        #copy the content of the first renamed file to the new filename
+                        shutil.copy2(source_filepath, new_filepath)
+                        #record new file name
+                        processed_files[original_filename_full].add(new_filename_full)
+                    
+            except Exception as e:
+                print("error with img copying")
+                
+
+        #4.update HTML 
+        new_src_value = f"{path_prefix}{new_filename_full}"
+        img['src'] = new_src_value
+        img['alt'] = h3_key
+        img['title'] = h3_key
            
     return soup
 
