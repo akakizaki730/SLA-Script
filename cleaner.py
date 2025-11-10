@@ -2,161 +2,132 @@ from bs4 import BeautifulSoup, Tag
 import os
 import re
 
+#using lxml parser if available; fallback to html.parser.
+try:
+    import lxml 
+    DEFAULT_PARSER = 'lxml'
+except Exception:
+    DEFAULT_PARSER = 'html.parser'
+
+
 def clean_html(html_content):
+    """clean html content and return cleaned html string
     """
-    Cleans and formats HTML
-    """
-    soup = BeautifulSoup(html_content, 'html.parser')
+    soup = BeautifulSoup(html_content, DEFAULT_PARSER)
 
-    #removes the whole <style>
-    for style_tag in soup.find_all('style'):
-        style_tag.decompose()
+    for tag_name in ('style', 'head'):
+        for tag in list(soup.find_all(tag_name)):
+            tag.decompose()
 
-    #remove the entire <head> tag
-    head_tag = soup.find('head')
-    if head_tag:
-        head_tag.decompose()
+    #move leading text out of <p> elements that also contain images.
+    for p in list(soup.find_all('p')):
+        imgs = p.find_all('img')
+        if not imgs:
+            continue
 
-    # #unwrap img tags from their parent span and p tags 
-    # for img_tag in soup.find_all('img'):
-    #     #unwrap parent span if it exists
-    #     parent_span = img_tag.find_parent('span')
-    #     if parent_span:
-    #         parent_span.unwrap()
-        
-    #     #unwrap parent p if it exists
-    #     parent_p = img_tag.find_parent('p')
-    #     if parent_p:
-    #         #move clsoingtag in front of image tag
-    #         parent_p.unwrap() 
+        #build a new paragraph from the leading nodes until the first <img>
+        if not p.contents:
+            continue
 
+        #if first child is an image or empty, skip
+        first = p.contents[0]
+        first_is_img = getattr(first, 'name', None) == 'img'
+        if first_is_img:
+            continue
 
+        new_p = soup.new_tag('p')
+        #move leading non-image contents into new_p
+        while p.contents and getattr(p.contents[0], 'name', None) != 'img':
+            new_p.append(p.contents[0].extract())
 
-    for img_tag in soup.find_all('img'):
-        parent_p = img_tag.find_parent('p')
-        if parent_p:
-            # Check if the text sibling before the image (ignoring whitespace/newlines)
-            # contains the step-like header.
-            # We look for a previous text sibling, or a sibling tag (usually span) that contains the text
-            
-            # Find the element containing the step text, typically the first child of the <p>
-            step_text_element = parent_p.contents[0] if parent_p.contents else None
-            
-            # If the step text and the image are direct children of the same <p>
-            if step_text_element and step_text_element != img_tag:
-                # Create a new p tag for the step text (or the element containing it)
-                new_p = soup.new_tag('p')
-                
-                # Move the step text element and the image's parent span/p out of the original p
-                
-                # Unwrap the image's immediate span parent if it exists
-                parent_span = img_tag.find_parent('span')
+        if new_p.get_text(strip=True):
+            p.insert_before(new_p)
+
+            #for each image left in p, unwrap any immediate span parents then extract and place after new_p
+            for img in list(p.find_all('img')):
+                parent_span = img.find_parent('span')
                 if parent_span:
                     parent_span.unwrap()
+                extracted = img.extract()
+                new_p.insert_after(extracted)
 
-                # Extract the image
-                extracted_img = img_tag.extract()
-                
-                # The remaining content in parent_p is likely the text/span.
-                # Use parent_p.contents to get all remaining elements (text/spans)
-                content_to_move = list(parent_p.contents)
-                for content in content_to_move:
-                    new_p.append(content.extract())
-                
-                # Insert the new p tag with the text before the original p tag (which will now be removed or empty)
-                parent_p.insert_before(new_p)
-                
-                # Insert the extracted image after the new p tag
-                new_p.insert_after(extracted_img)
-                
-                # Clean up the original parent_p if it is now empty (which it should be)
-                if not parent_p.get_text(strip=True) and not parent_p.find('img'):
-                    parent_p.decompose()
+        # remove empty paragraphs
+        if not p.get_text(strip=True) and not p.find('img'):
+            p.decompose()
 
-    # 2. Unwrap all span tags while keeping their contents (after the separation above)
-    for span in soup.find_all('span'):
+    #unwrap all span tags once
+    for span in list(soup.find_all('span')):
         span.unwrap()
 
-    #remove these attributes
-    attributes_to_remove = ['id', 'style', 'title', 'class', 'colspan', 'rowspan']
-    for tag in soup.find_all(True):
-        #keep 'class' on div tags
+    #attributes to remove
+    attributes_to_remove = {'id', 'style', 'title', 'colspan', 'rowspan'}
+    for tag in list(soup.find_all(True)):
+        # keep 'class' on div tags, otherwise remove 'class'
         if tag.name != 'div' and 'class' in tag.attrs:
             del tag.attrs['class']
-        
-        # remove the rest
+
+        # remove the rest of attributes (if present)
         for attr in attributes_to_remove:
-            if attr in tag.attrs and attr != 'class':
+            if attr in tag.attrs:
                 del tag.attrs[attr]
 
-    #Remove all span tags while keeping their contents
-    for span in soup.find_all('span'):
-        span.unwrap()
-
-    # Remove div tags and their content only if they are empty
-    for div in soup.find_all('div'):
+    # Remove or unwrap divs: if empty and no images -> decompose, else unwrap
+    for div in list(soup.find_all('div')):
         if not div.get_text(strip=True) and not div.find('img'):
             div.decompose()
         else:
             div.unwrap()
-    
-    #remove any text that inclues 'updated'
-    for p_tag in soup.find_all('p'):
-        # The regular expression matches "Updated" followed by a number and an optional colon.
-        if re.search(r'^Updated\s*\d+', p_tag.get_text(strip=True)):
-            p_tag.decompose()
 
-    #removes empty html tables
-    for table in soup.find_all('table'):
-        if not table.get_text(strip=True):
-            table.decompose()
-        
-    #remove empty p tags
-    for p in soup.find_all('p'):
-        if not p.get_text(strip=True):
+    # Clean up <p> tags: remove Updated... headers and empty paragraphs in a single pass
+    updated_re = re.compile(r'^Updated\s*\d+', re.IGNORECASE)
+    for p in list(soup.find_all('p')):
+        text = p.get_text(strip=True)
+        if not text:
+            p.decompose()
+            continue
+        if updated_re.search(text):
             p.decompose()
 
-    #replace &nbsp; with a regular space
-    # attempting to remove extra whitespace
-    for text_node in soup.find_all(string=True):
-        # 1. Replace non-breaking spaces with standard spaces
-        clean_text = text_node.replace("\xa0", " ")
-        normalized_text = " ".join(clean_text.split())
-        
+    #remove empty tables
+    for table in list(soup.find_all('table')):
+        if not table.get_text(strip=True):
+            table.decompose()
+
+    #normalize text nodes but avoid replacing every string unnecessarily
+    for text_node in list(soup.find_all(string=True)):
+        if not text_node or not isinstance(text_node, str):
+            continue
+        if '\xa0' not in text_node and not re.search(r'\s{2,}', text_node):
+            continue
+        clean_text = text_node.replace('\xa0', ' ')
+        normalized_text = ' '.join(clean_text.split())
         text_node.replace_with(normalized_text)
 
-
-    for h1_tag in soup.find_all('h1'):
-        #chekc if emoty and has img
+    #remove empty h1 that may only contain images
+    for h1_tag in list(soup.find_all('h1')):
         if not h1_tag.get_text(strip=True) and h1_tag.find('img'):
             h1_tag.unwrap()
 
-
-    #unwrap body and html tags
+    #unwrap body/html if present
     if soup.body:
         soup.body.unwrap()
     if soup.html:
         soup.html.unwrap()
 
-    #make new divs
-    new_div = soup.new_tag("div", **{'class': 'article-body'})
-
-    new_h1 = soup.new_tag("h1", **{'class': 'article-title invisible'})
-    new_h1.string = "Title"
-    
-    new_p = soup.new_tag("p", **{'class': 'article-summary invisible'})
-    new_p.string = "Summary"
-
+    #wrap all content in a new div with required structure
+    new_div = soup.new_tag('div', **{'class': 'article-body'})
+    new_h1 = soup.new_tag('h1', **{'class': 'article-title invisible'})
+    new_h1.string = 'Title'
+    new_p = soup.new_tag('p', **{'class': 'article-summary invisible'})
+    new_p.string = 'Summary'
     new_div.append(new_h1)
     new_div.append(new_p)
 
-    #move all existing content into the new div
+    #move all remaining top-level content into the new div
     content_to_wrap = list(soup.contents)
     for element in content_to_wrap:
         new_div.append(element)
-    
-    #replace the original ontents with just the new div
     soup.clear()
     soup.append(new_div)
 
-    return str(soup.prettify())
+    return soup.prettify()
